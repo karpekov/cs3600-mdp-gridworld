@@ -1,0 +1,13 @@
+name: cs3600-gridworld-mdp
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.8
+  - numpy>=1.19.0
+  - matplotlib>=3.3.0
+  - ipywidgets>=7.6.0
+  - jupyter>=1.0.0
+  - jupyterlab>=3.0.0
+  - notebook
+  - ipython
