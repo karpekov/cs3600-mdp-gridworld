@@ -1,4 +1,4 @@
-name: cs3600-gridworld-mdp
+name: cs3600-mdp-gridworld
 channels:
   - conda-forge
   - defaults

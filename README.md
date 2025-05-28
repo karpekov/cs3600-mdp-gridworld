@@ -42,9 +42,8 @@ To run the code locally:
 
    **Using Conda (Recommended)**:
    ```bash
-   conda create -n mdp-gridworld python=3.9
-   conda activate mdp-gridworld
-   conda install numpy matplotlib ipywidgets jupyter notebook
+   conda env create -f environment.yml
+   conda activate cs3600-mdp-gridworld
    ```
 
    **Using pip**:
