@@ -28,7 +28,15 @@ The implementation supports two different Bellman equation formulations:
 
 ## How to Use This Repository
 
-### Local Setup
+There are three ways to use this code:
+
+### 1. Using Google Colab (Recommended for Quick Start)
+
+The easiest way to use this code is to use this Google Colab that replicates the functionality in the gridworld MDP notebook. The Colab notebook is a good way to get started with the code and explore the algorithms.
+
+**Colab Link**: [https://tinyurl.com/cs3600-colab-mdp](https://tinyurl.com/cs3600-colab-mdp)
+
+### 2. Local Setup
 
 To run the code locally:
 
@@ -57,6 +65,16 @@ To run the code locally:
    ```
 
 4. Open `gridworld_mdp.py` or create a new notebook to explore the MDP algorithms.
+
+### 3. Direct Python Script Usage
+
+You can also run the code directly as a Python script without Jupyter:
+
+```python
+python gridworld_mdp.py
+```
+
+This will run a default example and display the visualization.
 
 ### Quick Start Example
 
