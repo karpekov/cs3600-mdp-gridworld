@@ -200,8 +200,8 @@ class GridWorldMDP:
 
         return q_values, formulas
 
-    def get_greedy_policy(self, V):
-        """Extract greedy policy from value function."""
+    def get_greedy_policy(self, V, tolerance=1e-6):
+        """Extract greedy policy from value function. Returns all tied optimal actions."""
         policy = {}
 
         for r in range(self.rows):
@@ -211,8 +211,7 @@ class GridWorldMDP:
                 if state in self.terminals or state in self.obstacles:
                     continue
 
-                best_action = None
-                best_value = -np.inf
+                action_values = {}
 
                 for action in self.actions:
                     transitions = self.get_transitions(state, action)
@@ -235,11 +234,14 @@ class GridWorldMDP:
 
                         q_value = step_cost_contribution + self.gamma * expected_next_value
 
-                    if q_value > best_value:
-                        best_value = q_value
-                        best_action = action
+                    action_values[action] = q_value
 
-                policy[state] = best_action
+                # Find all actions with maximum value (within tolerance)
+                max_value = max(action_values.values())
+                optimal_actions = [action for action, value in action_values.items()
+                                 if abs(value - max_value) <= tolerance]
+
+                policy[state] = optimal_actions
 
         return policy
 
@@ -352,7 +354,7 @@ class GridWorldMDP:
             for c in range(self.cols):
                 state = (r, c)
                 if state not in self.terminals and state not in self.obstacles:
-                    policy[state] = np.random.choice(self.actions)
+                    policy[state] = [np.random.choice(self.actions)]  # Initialize as list
 
         for iteration in range(max_iterations):
             # Policy Evaluation
@@ -368,14 +370,27 @@ class GridWorldMDP:
             # Policy Improvement
             new_policy = self.get_greedy_policy(V)
 
-            # Check for convergence
-            if new_policy == policy:
+            # Check for convergence - policies are equivalent if they have the same optimal actions
+            if self._policies_equivalent(new_policy, policy):
                 self.converged_iteration = iteration + 1
                 break
 
             policy = new_policy
 
         return self.converged_iteration or max_iterations
+
+    def _policies_equivalent(self, policy1, policy2):
+        """Check if two policies are equivalent (have same optimal actions for each state)."""
+        if set(policy1.keys()) != set(policy2.keys()):
+            return False
+
+        for state in policy1:
+            actions1 = set(policy1[state])
+            actions2 = set(policy2[state])
+            if actions1 != actions2:
+                return False
+
+        return True
 
     def policy_evaluation(self, policy, max_iterations=100, tolerance=1e-6):
         """Evaluate a given policy."""
@@ -402,7 +417,11 @@ class GridWorldMDP:
                     if state not in policy:
                         continue
 
-                    action = policy[state]
+                    # Handle policy that may contain multiple optimal actions
+                    # For policy evaluation, we can use any of the optimal actions
+                    # since they all have the same value by definition
+                    actions = policy[state]
+                    action = actions[0] if isinstance(actions, list) else actions
                     transitions = self.get_transitions(state, action)
 
                     if self.formula_type == 'AIMA':
@@ -719,13 +738,39 @@ class GridWorldMDP:
                         ax.text(center_x, center_y, f'{V[state]:.3f}',
                                ha='center', va='center', fontsize=10, fontweight='bold')
 
-                    # Show policy
+                    # Show policy - handle multiple optimal actions
                     if show_policy and state in policy:
-                        arrow = self.arrow_symbols[policy[state]]
-                        # Position policy arrow slightly below center if values are shown
-                        policy_y = center_y - 0.2 if show_values else center_y
-                        ax.text(center_x, policy_y, arrow,
-                               ha='center', va='center', fontsize=14, color='blue')
+                        optimal_actions = policy[state]
+                        # Position policy arrows slightly below center if values are shown
+                        base_policy_y = center_y - 0.2 if show_values else center_y
+
+                        if len(optimal_actions) == 1:
+                            # Single optimal action - show arrow at center
+                            arrow = self.arrow_symbols[optimal_actions[0]]
+                            ax.text(center_x, base_policy_y, arrow,
+                                   ha='center', va='center', fontsize=14, color='blue')
+                        else:
+                            # Multiple optimal actions - position based on direction
+                            offset = 0.08  # Small offset amount
+
+                            for action in optimal_actions:
+                                arrow = self.arrow_symbols[action]
+
+                                # Position arrows based on their direction
+                                if action == 'U':
+                                    arrow_x, arrow_y = center_x, base_policy_y + offset
+                                elif action == 'D':
+                                    arrow_x, arrow_y = center_x, base_policy_y - offset
+                                elif action == 'L':
+                                    arrow_x, arrow_y = center_x - offset, base_policy_y
+                                elif action == 'R':
+                                    arrow_x, arrow_y = center_x + offset, base_policy_y
+                                else:
+                                    arrow_x, arrow_y = center_x, base_policy_y
+
+                                ax.text(arrow_x, arrow_y, arrow,
+                                       ha='center', va='center', fontsize=14,
+                                       color='blue', fontweight='bold')
 
                     # Show Q-values as small triangular indicators at cell edges
                     if show_qvalues and state in q_values:
@@ -951,8 +996,11 @@ def show_iteration_details(env, iteration_num):
 
     if iteration_num < len(env.policy_history):
         print("Policy:")
-        for state, action in env.policy_history[iteration_num].items():
-            print(f"  {state}: {action}")
+        for state, actions in env.policy_history[iteration_num].items():
+            if len(actions) == 1:
+                print(f"  {state}: {actions[0]}")
+            else:
+                print(f"  {state}: {actions} (tied optimal actions)")
 
 
 def compare_formulations():
@@ -979,14 +1027,95 @@ def compare_formulations():
     print(env_berkeley.v_history[-1])
 
     # Check if results are similar
-    import numpy as np
     values_similar = np.allclose(env_aima.v_history[-1], env_berkeley.v_history[-1], atol=1e-3)
-    policies_same = env_aima.policy_history[-1] == env_berkeley.policy_history[-1]
+    policies_same = env_aima._policies_equivalent(env_aima.policy_history[-1], env_berkeley.policy_history[-1])
 
     print(f"\nValues are similar: {values_similar}")
     print(f"Policies are identical: {policies_same}")
 
     return env_aima, env_berkeley
+
+
+def test_extreme_ties():
+    """Test with extreme ties - environment where all actions are equally good."""
+    print("\n=== Testing Extreme Ties (All Actions Equal) ===")
+
+    # Create a 2x2 grid with high step cost and distant terminal to make all actions equal
+    env = GridWorldMDP(rows=2, cols=2, gamma=0.5, noise=0.0, step_cost=-0.1, formula_type='BERKELEY')
+    env.set_terminals({(1, 1): +1})  # Terminal at bottom right
+    env.set_obstacles(set())  # No obstacles
+
+    # Manually set initial values to create ties
+    print("Environment setup:")
+    print(f"  Size: {env.rows}x{env.cols}")
+    print(f"  Terminals: {env.terminals}")
+    print(f"  Low gamma and step cost to create ties")
+
+    # Run just a couple iterations to see ties
+    iterations = env.value_iteration(max_iterations=3)
+    print(f"Ran {iterations} iterations")
+
+    # Show final policies
+    print("\nPolicies by iteration:")
+    for i, policy in enumerate(env.policy_history):
+        print(f"Iteration {i}:")
+        for state, actions in policy.items():
+            if len(actions) == 1:
+                print(f"  {state}: {actions[0]}")
+            else:
+                print(f"  {state}: {actions} (tied optimal actions)")
+
+    # Plot the final iteration
+    env.plot_iteration(-1, show_values=True, show_policy=True, show_qvalues=False)
+    plt.title("Extreme Ties - Multiple Overlapping Arrows")
+    plt.savefig('extreme_ties_visualization.png', dpi=150, bbox_inches='tight')
+    print(f"\nExtreme ties visualization saved to: extreme_ties_visualization.png")
+    plt.close()
+
+    return env
+
+
+def test_ties():
+    """Test function to demonstrate tie-breaking with multiple optimal actions."""
+    print("=== Testing Tie-Breaking Functionality ===")
+
+    # Create a simple 3x3 grid with terminal in the center to create more ties
+    env = GridWorldMDP(rows=3, cols=3, gamma=0.9, noise=0.0, step_cost=0.0, formula_type='BERKELEY')
+    env.set_terminals({(1, 1): +1})  # Terminal in center
+    env.set_obstacles(set())  # No obstacles
+
+    print("Environment setup:")
+    print(f"  Size: {env.rows}x{env.cols}")
+    print(f"  Terminals: {env.terminals}")
+    print(f"  No noise, no step cost")
+
+    # Run value iteration
+    iterations = env.value_iteration(max_iterations=10)
+    print(f"Converged in {iterations} iterations")
+
+    # Show final values and policies
+    print("\nFinal values:")
+    final_values = env.v_history[-1]
+    for r in range(env.rows):
+        for c in range(env.cols):
+            print(f"  ({r},{c}): {final_values[r,c]:.3f}")
+
+    print("\nFinal policy:")
+    final_policy = env.policy_history[-1]
+    for state, actions in final_policy.items():
+        if len(actions) == 1:
+            print(f"  {state}: {actions[0]}")
+        else:
+            print(f"  {state}: {actions} (tied optimal actions)")
+
+    # Plot the environment and save to file
+    env.plot_iteration(-1, show_values=True, show_policy=True, show_qvalues=False)
+    plt.title("Test Environment - Overlapping Arrows for Tied Optimal Actions")
+    plt.savefig('tie_breaking_visualization.png', dpi=150, bbox_inches='tight')
+    print("\nVisualization saved to: tie_breaking_visualization.png")
+    plt.close()  # Close the figure to free memory
+
+    return env
 
 
 # Demo usage function
@@ -1011,19 +1140,19 @@ def demo(formula_type='BERKELEY'):
 
 if __name__ == "__main__":
 
-    # Debug value iteration
-    env = debug_value_iteration(formula_type='AIMA')
-    # Look at specific iterations
-    show_iteration_details(env, 0)
-    show_iteration_details(env, 1)
-    show_iteration_details(env, 2)
+    # # Debug value iteration
+    # env = debug_value_iteration(formula_type='AIMA')
+    # # Look at specific iterations
+    # show_iteration_details(env, 0)
+    # show_iteration_details(env, 1)
+    # show_iteration_details(env, 2)
 
-    # Debug value iteration
-    env = debug_value_iteration(formula_type='BERKELEY')
-    # Look at specific iterations
-    show_iteration_details(env, 0)
-    show_iteration_details(env, 1)
-    show_iteration_details(env, 2)
+    # # Debug value iteration
+    # env = debug_value_iteration(formula_type='BERKELEY')
+    # # Look at specific iterations
+    # show_iteration_details(env, 0)
+    # show_iteration_details(env, 1)
+    # show_iteration_details(env, 2)
 
     env = debug_policy_iteration(formula_type='BERKELEY')
     # Look at specific iterations
@@ -1033,3 +1162,11 @@ if __name__ == "__main__":
 
     # Compare formulations
     compare_formulations()
+
+    # Test tie-breaking functionality (creates PNG files)
+    print("\n" + "="*60)
+    print("TESTING TIE-BREAKING FUNCTIONALITY")
+    print("When Q-values are tied, multiple arrows will be shown overlapping")
+    print("="*60)
+    test_ties()
+    test_extreme_ties()
