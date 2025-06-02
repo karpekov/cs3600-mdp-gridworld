@@ -675,7 +675,8 @@ class GridWorldMDP:
         policy = self.policy_history[iteration] if iteration < len(self.policy_history) else {}
         q_values = self.q_history[iteration] if iteration < len(self.q_history) else {}
 
-        fig, ax = plt.subplots(figsize=(max(6, self.cols * 1.5), max(4, self.rows * 1.2)))
+        # Increase DPI for higher resolution
+        fig, ax = plt.subplots(figsize=(max(6, self.cols * 1.5), max(4, self.rows * 1.2)), dpi=150)
 
         # Calculate value range for gradient coloring (excluding terminals and obstacles)
         regular_values = []
@@ -703,12 +704,12 @@ class GridWorldMDP:
                 state = (r, c)
                 center_x, center_y = x + 0.5, y + 0.5
 
-                # Terminal states
+                # Terminal states - increased font size
                 if state in self.terminals:
                     reward = self.terminals[state]
                     color = 'green' if reward > 0 else 'red'
                     ax.text(center_x, center_y, f'{reward:+.0f}',
-                           ha='center', va='center', fontsize=16,
+                           ha='center', va='center', fontsize=20,
                            color=color, fontweight='bold')
                     # Add background color
                     bg_color = 'lightgreen' if reward > 0 else 'lightcoral'
@@ -716,13 +717,13 @@ class GridWorldMDP:
                                               facecolor=bg_color, alpha=0.3)
                     ax.add_patch(bg_rect)
 
-                # Obstacle states
+                # Obstacle states - increased font size
                 elif state in self.obstacles:
                     obstacle_rect = patches.Rectangle((x, y), 1, 1, fill=True,
                                                     facecolor='gray', alpha=0.7)
                     ax.add_patch(obstacle_rect)
                     ax.text(center_x, center_y, '■', ha='center', va='center',
-                           fontsize=20, color='black')
+                           fontsize=24, color='black')
 
                 # Regular states
                 else:
@@ -733,12 +734,12 @@ class GridWorldMDP:
                                                   facecolor=bg_color, alpha=0.4)
                         ax.add_patch(bg_rect)
 
-                    # Show values
+                    # Show values - increased font size
                     if show_values:
                         ax.text(center_x, center_y, f'{V[state]:.3f}',
-                               ha='center', va='center', fontsize=10, fontweight='bold')
+                               ha='center', va='center', fontsize=12, fontweight='bold')
 
-                    # Show policy - handle multiple optimal actions
+                    # Show policy - handle multiple optimal actions - increased font size
                     if show_policy and state in policy:
                         optimal_actions = policy[state]
                         # Position policy arrows slightly below center if values are shown
@@ -748,7 +749,7 @@ class GridWorldMDP:
                             # Single optimal action - show arrow at center
                             arrow = self.arrow_symbols[optimal_actions[0]]
                             ax.text(center_x, base_policy_y, arrow,
-                                   ha='center', va='center', fontsize=14, color='blue')
+                                   ha='center', va='center', fontsize=16, color='blue')
                         else:
                             # Multiple optimal actions - position based on direction
                             offset = 0.08  # Small offset amount
@@ -769,10 +770,10 @@ class GridWorldMDP:
                                     arrow_x, arrow_y = center_x, base_policy_y
 
                                 ax.text(arrow_x, arrow_y, arrow,
-                                       ha='center', va='center', fontsize=14,
-                                       color='blue', fontweight='bold')
+                                       ha='center', va='center', fontsize=16,
+                                       color='blue')
 
-                    # Show Q-values as small triangular indicators at cell edges
+                    # Show Q-values as small triangular indicators at cell edges - increased font size
                     if show_qvalues and state in q_values:
                         # Define positions for triangular Q-value indicators
                         triangle_size = 0.08  # Size of triangular indicators
@@ -815,9 +816,9 @@ class GridWorldMDP:
                                                          alpha=0.7, linewidth=0.5)
                                 ax.add_patch(triangle)
 
-                                # Add Q-value text closer to center
+                                # Add Q-value text closer to center - significantly increased font size
                                 ax.text(text_x, text_y, f'{q_val:.2f}',
-                                       ha='center', va='center', fontsize=5,
+                                       ha='center', va='center', fontsize=6,
                                        color='darkblue', fontweight='bold')
 
         ax.set_xlim(0, self.cols)
@@ -825,7 +826,7 @@ class GridWorldMDP:
         ax.set_xticks([])
         ax.set_yticks([])
 
-        # Title with step cost info
+        # Title with step cost info - increased font size
         title_parts = [f'Iteration {iteration}']
         if self.step_cost != 0:
             title_parts.append(f'(Step Cost: {self.step_cost:.2f})')
@@ -836,9 +837,9 @@ class GridWorldMDP:
         if show_qvalues:
             title_parts.append('Q-Values')
 
-        ax.set_title(' + '.join(title_parts), fontsize=14, fontweight='bold')
+        ax.set_title(' + '.join(title_parts), fontsize=16, fontweight='bold')
         ax.text(self.cols/2, -0.15, f'γ={self.gamma}, noise={self.noise}, step_cost={self.step_cost:.2f}',
-                ha='center', va='top', fontsize=10, transform=ax.transData)
+                ha='center', va='top', fontsize=12, transform=ax.transData)
 
     def print_formulas(self, iteration):
         """Print Q-value formulas for a specific iteration."""
@@ -866,7 +867,8 @@ class GridWorldMDP:
 
     def plot_environment(self):
         """Plot just the basic environment structure - terminals, obstacles, and empty states."""
-        fig, ax = plt.subplots(figsize=(max(6, self.cols * 1.5), max(4, self.rows * 1.2)))
+        # Increase DPI for higher resolution
+        fig, ax = plt.subplots(figsize=(max(6, self.cols * 1.5), max(4, self.rows * 1.2)), dpi=150)
 
         # Draw grid
         for r in range(self.rows):
@@ -881,12 +883,12 @@ class GridWorldMDP:
                 state = (r, c)
                 center_x, center_y = x + 0.5, y + 0.5
 
-                # Terminal states
+                # Terminal states - increased font size
                 if state in self.terminals:
                     reward = self.terminals[state]
                     color = 'green' if reward > 0 else 'red'
                     ax.text(center_x, center_y, f'{reward:+.0f}',
-                           ha='center', va='center', fontsize=16,
+                           ha='center', va='center', fontsize=18,
                            color=color, fontweight='bold')
                     # Add background color
                     bg_color = 'lightgreen' if reward > 0 else 'lightcoral'
@@ -894,22 +896,23 @@ class GridWorldMDP:
                                               facecolor=bg_color, alpha=0.3)
                     ax.add_patch(bg_rect)
 
-                # Obstacle states
+                # Obstacle states - increased font size
                 elif state in self.obstacles:
                     obstacle_rect = patches.Rectangle((x, y), 1, 1, fill=True,
                                                     facecolor='gray', alpha=0.7)
                     ax.add_patch(obstacle_rect)
                     ax.text(center_x, center_y, '■', ha='center', va='center',
-                           fontsize=20, color='black')
+                           fontsize=22, color='black')
 
         ax.set_xlim(0, self.cols)
         ax.set_ylim(0, self.rows)
         ax.set_xticks([])
         ax.set_yticks([])
 
-        ax.set_title(f'Grid World Environment ({self.rows}x{self.cols})', fontsize=14, fontweight='bold')
+        # Increased font sizes for title and subtitle
+        ax.set_title(f'Grid World Environment ({self.rows}x{self.cols})', fontsize=16, fontweight='bold')
         ax.text(self.cols/2, -0.15, f'γ={self.gamma}, noise={self.noise}, step_cost={self.step_cost:.2f}',
-                ha='center', va='top', fontsize=10, transform=ax.transData)
+                ha='center', va='top', fontsize=12, transform=ax.transData)
         plt.show()
 
 
