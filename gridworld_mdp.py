@@ -74,6 +74,164 @@ class GridWorldMDP:
         """Set the step cost/reward."""
         self.step_cost = step_cost
 
+    def set_initial_policy(self, policy_dict):
+        """
+        Set a custom initial policy for policy iteration.
+
+        Args:
+            policy_dict (dict): Dictionary mapping states to actions
+                               Format: {(row, col): action_string}
+                               Example: {(0,0): 'R', (0,1): 'R', ...}
+        """
+        self.custom_initial_policy = {}
+
+        # Validate and convert to internal format
+        for state, action in policy_dict.items():
+            if not self.is_valid_state(state[0], state[1]):
+                continue
+            if state in self.terminals:
+                continue  # Skip terminal states
+            if action not in self.actions:
+                raise ValueError(f"Invalid action '{action}' for state {state}. Must be one of {self.actions}")
+
+            # Store as list for consistency with policy representation
+            self.custom_initial_policy[state] = [action]
+
+        print(f"Custom initial policy set for {len(self.custom_initial_policy)} states")
+
+    def create_directional_policy(self, direction):
+        """
+        Create a policy that always chooses the same direction.
+
+        Args:
+            direction (str): One of 'U', 'D', 'L', 'R', 'UP', 'DOWN', 'LEFT', 'RIGHT'
+
+        Returns:
+            dict: Policy dictionary suitable for set_initial_policy()
+        """
+        # Handle different direction formats
+        direction_map = {
+            'UP': 'U', 'DOWN': 'D', 'LEFT': 'L', 'RIGHT': 'R',
+            'U': 'U', 'D': 'D', 'L': 'L', 'R': 'R'
+        }
+
+        if direction.upper() not in direction_map:
+            raise ValueError(f"Invalid direction '{direction}'. Must be one of {list(direction_map.keys())}")
+
+        action = direction_map[direction.upper()]
+        policy = {}
+
+        for r in range(self.rows):
+            for c in range(self.cols):
+                state = (r, c)
+                if self.is_valid_state(r, c) and state not in self.terminals:
+                    policy[state] = action
+
+        return policy
+
+    def create_random_policy(self, seed=None):
+        """
+        Create a random policy.
+
+        Args:
+            seed (int, optional): Random seed for reproducibility
+
+        Returns:
+            dict: Policy dictionary suitable for set_initial_policy()
+        """
+        if seed is not None:
+            np.random.seed(seed)
+
+        policy = {}
+
+        for r in range(self.rows):
+            for c in range(self.cols):
+                state = (r, c)
+                if self.is_valid_state(r, c) and state not in self.terminals:
+                    action = np.random.choice(self.actions)
+                    policy[state] = action
+
+        return policy
+
+    def create_clockwise_policy(self):
+        """
+        Create a policy that follows a clockwise pattern around the grid.
+
+        Returns:
+            dict: Policy dictionary suitable for set_initial_policy()
+        """
+        policy = {}
+
+        for r in range(self.rows):
+            for c in range(self.cols):
+                state = (r, c)
+                if not self.is_valid_state(r, c) or state in self.terminals:
+                    continue
+
+                # Clockwise movement: top row goes right, right column goes down,
+                # bottom row goes left, left column goes up
+                if r == 0:  # Top row
+                    action = 'R'
+                elif c == self.cols - 1:  # Right column
+                    action = 'D'
+                elif r == self.rows - 1:  # Bottom row
+                    action = 'L'
+                elif c == 0:  # Left column
+                    action = 'U'
+                else:  # Interior - head towards nearest edge clockwise
+                    # Simple heuristic: head right if closer to top/bottom, down if closer to edges
+                    if min(r, self.rows - 1 - r) <= min(c, self.cols - 1 - c):
+                        action = 'R'  # Head toward right edge first
+                    else:
+                        action = 'D'  # Head toward bottom edge first
+
+                policy[state] = action
+
+        return policy
+
+    def clear_initial_policy(self):
+        """Clear any custom initial policy, reverting to random initialization."""
+        if hasattr(self, 'custom_initial_policy'):
+            del self.custom_initial_policy
+        print("Custom initial policy cleared")
+
+    def print_policy(self, policy_dict, title="Policy"):
+        """
+        Print a policy in a readable format.
+
+        Args:
+            policy_dict (dict): Policy to print (either custom format or internal format)
+            title (str): Title for the policy display
+        """
+        print(f"\n{title}:")
+        print("=" * (len(title) + 1))
+
+        for r in range(self.rows):
+            row_display = []
+            for c in range(self.cols):
+                state = (r, c)
+
+                if state in self.terminals:
+                    reward = self.terminals[state]
+                    row_display.append(f"{reward:+2.0f}")
+                elif state in self.obstacles:
+                    row_display.append(" ■ ")
+                elif state in policy_dict:
+                    # Handle both custom format {state: action} and internal format {state: [action]}
+                    actions = policy_dict[state]
+                    if isinstance(actions, list):
+                        if len(actions) == 1:
+                            row_display.append(f" {actions[0]} ")
+                        else:
+                            row_display.append(f"{len(actions)}")  # Show number of tied actions
+                    else:
+                        row_display.append(f" {actions} ")
+                else:
+                    row_display.append(" ? ")
+
+            print(" ".join(row_display))
+        print()
+
     def reset_history(self):
         """Reset all iteration history."""
         self.v_history = []
@@ -81,6 +239,10 @@ class GridWorldMDP:
         self.formula_history = []
         self.policy_history = []
         self.converged_iteration = None
+
+        # Reset policy iteration specific history
+        self.policy_eval_history = []
+        self.policy_eval_v_history = []
 
     def in_grid(self, r, c):
         """Check if coordinates are within grid bounds."""
@@ -342,25 +504,39 @@ class GridWorldMDP:
     def policy_iteration(self, max_iterations=50):
         """
         Run policy iteration algorithm with full history tracking.
+        Uses custom initial policy if set via set_initial_policy(), otherwise random.
 
         Returns:
             converged_iteration: The iteration where convergence occurred
         """
         self.reset_history()
 
-        # Initialize random policy
-        policy = {}
-        for r in range(self.rows):
-            for c in range(self.cols):
-                state = (r, c)
-                if state not in self.terminals and state not in self.obstacles:
-                    policy[state] = [np.random.choice(self.actions)]  # Initialize as list
+        # Initialize storage for policy evaluation steps
+        self.policy_eval_history = []  # List of lists: [policy_iter][eval_step]
+        self.policy_eval_v_history = []  # List of lists: [policy_iter][eval_step]
+
+        # Initialize policy - use custom if available, otherwise random
+        if hasattr(self, 'custom_initial_policy') and self.custom_initial_policy:
+            print("Using custom initial policy")
+            policy = self.custom_initial_policy.copy()
+        else:
+            print("Using random initial policy")
+            policy = {}
+            for r in range(self.rows):
+                for c in range(self.cols):
+                    state = (r, c)
+                    if state not in self.terminals and state not in self.obstacles:
+                        policy[state] = [np.random.choice(self.actions)]  # Initialize as list
 
         for iteration in range(max_iterations):
-            # Policy Evaluation
-            V = self.policy_evaluation(policy)
+            # Policy Evaluation with step tracking
+            V, eval_steps = self.policy_evaluation_with_history(policy)
 
-            # Store current state
+            # Store policy evaluation history for this policy iteration
+            self.policy_eval_history.append(eval_steps['v_history'])
+            self.policy_eval_v_history.append(eval_steps['v_history'])
+
+            # Store final state for this policy iteration
             q_vals, formulas = self.compute_q_values_and_formulas(V)
             self.v_history.append(V.copy())
             self.q_history.append(q_vals)
@@ -379,22 +555,16 @@ class GridWorldMDP:
 
         return self.converged_iteration or max_iterations
 
-    def _policies_equivalent(self, policy1, policy2):
-        """Check if two policies are equivalent (have same optimal actions for each state)."""
-        if set(policy1.keys()) != set(policy2.keys()):
-            return False
+    def policy_evaluation_with_history(self, policy, max_iterations=100, tolerance=1e-6):
+        """
+        Evaluate a given policy and return both final result and step-by-step history.
 
-        for state in policy1:
-            actions1 = set(policy1[state])
-            actions2 = set(policy2[state])
-            if actions1 != actions2:
-                return False
-
-        return True
-
-    def policy_evaluation(self, policy, max_iterations=100, tolerance=1e-6):
-        """Evaluate a given policy."""
+        Returns:
+            V: Final value function
+            history: Dictionary with 'v_history' containing all intermediate steps
+        """
         V = np.zeros((self.rows, self.cols))
+        v_history = []
 
         # Initialize terminal states based on formulation
         if self.formula_type == 'BERKELEY':
@@ -403,7 +573,10 @@ class GridWorldMDP:
                 V[state] = reward
         # AIMA: terminal states remain at 0 (rewards come from transitions TO them)
 
-        for _ in range(max_iterations):
+        # Store initial values
+        v_history.append(V.copy())
+
+        for step in range(max_iterations):
             delta = 0.0
             new_V = V.copy()
 
@@ -454,13 +627,34 @@ class GridWorldMDP:
                     V[state] = reward
             # AIMA: terminal states remain at 0
 
+            # Store this step
+            v_history.append(V.copy())
+
             if delta < tolerance:
                 break
 
+        return V, {'v_history': v_history}
+
+    def _policies_equivalent(self, policy1, policy2):
+        """Check if two policies are equivalent (have same optimal actions for each state)."""
+        if set(policy1.keys()) != set(policy2.keys()):
+            return False
+
+        for state in policy1:
+            actions1 = set(policy1[state])
+            actions2 = set(policy2[state])
+            if actions1 != actions2:
+                return False
+
+        return True
+
+    def policy_evaluation(self, policy, max_iterations=100, tolerance=1e-6):
+        """Evaluate a given policy (original method for compatibility)."""
+        V, _ = self.policy_evaluation_with_history(policy, max_iterations, tolerance)
         return V
 
     def create_visualization_widgets(self):
-        """Create comprehensive ipywidgets for interactive visualization."""
+        """Create comprehensive ipywidgets for interactive visualization with dual sliders for policy iteration."""
         # Algorithm selection
         algorithm_widget = widgets.RadioButtons(
             options=['Value Iteration', 'Policy Iteration'],
@@ -486,16 +680,30 @@ class GridWorldMDP:
             layout=widgets.Layout(width='100px', height='35px')
         )
 
-        # Iteration slider (will be updated after running)
+        # Main iteration slider (always visible)
         iteration_slider = widgets.IntSlider(
             value=0,
             min=0,
             max=0,
             step=1,
-            description='Iteration:',
+            description='Policy Iter:',
             style={'description_width': '80px'},
             layout=widgets.Layout(width='400px')
         )
+
+        # Policy evaluation slider (only for policy iteration)
+        eval_slider = widgets.IntSlider(
+            value=0,
+            min=0,
+            max=0,
+            step=1,
+            description='Eval Step:',
+            style={'description_width': '80px'},
+            layout=widgets.Layout(width='400px')
+        )
+
+        # Container for sliders (to show/hide eval slider)
+        slider_container = widgets.VBox([iteration_slider])
 
         # Display options - simple checkboxes
         show_values = widgets.Checkbox(
@@ -526,12 +734,22 @@ class GridWorldMDP:
 
             if algorithm_widget.value == 'Value Iteration':
                 converged = self.value_iteration()
+                # Update main slider range
+                iteration_slider.max = len(self.v_history) - 1
+                iteration_slider.description = 'Iteration:'
+                # Hide eval slider for value iteration
+                slider_container.children = [iteration_slider]
             else:
                 converged = self.policy_iteration()
+                # Update main slider range
+                iteration_slider.max = len(self.v_history) - 1
+                iteration_slider.description = 'Policy Iter:'
+                # Show eval slider for policy iteration
+                eval_slider.max = len(self.policy_eval_history[0]) - 1 if self.policy_eval_history else 0
+                slider_container.children = [iteration_slider, eval_slider]
 
-            # Update slider range and enable next step button
-            iteration_slider.max = len(self.v_history) - 1
             iteration_slider.value = min(iteration_slider.value, iteration_slider.max)
+            eval_slider.value = 0
             next_step_button.disabled = False
 
             with plot_output:
@@ -540,39 +758,100 @@ class GridWorldMDP:
                 update_display()
 
         def next_step(b):
-            if iteration_slider.value < iteration_slider.max:
-                iteration_slider.value += 1
-            else:
-                with plot_output:
-                    clear_output(wait=True)
-                    print("Already at final iteration")
-                    update_display()
+            if algorithm_widget.value == 'Value Iteration':
+                if iteration_slider.value < iteration_slider.max:
+                    iteration_slider.value += 1
+                else:
+                    with plot_output:
+                        clear_output(wait=True)
+                        print("Already at final iteration")
+                        update_display()
+            else:  # Policy Iteration
+                # First try to advance eval step, then policy iteration
+                if eval_slider.value < eval_slider.max:
+                    eval_slider.value += 1
+                elif iteration_slider.value < iteration_slider.max:
+                    iteration_slider.value += 1
+                    # Update eval slider range for new policy iteration
+                    if iteration_slider.value < len(self.policy_eval_history):
+                        eval_slider.max = len(self.policy_eval_history[iteration_slider.value]) - 1
+                        eval_slider.value = 0
+                else:
+                    with plot_output:
+                        clear_output(wait=True)
+                        print("Already at final iteration")
+                        update_display()
 
         def update_display(*args):
             if not self.v_history:
                 return
 
-            iteration = iteration_slider.value
+            policy_iter = iteration_slider.value
 
-            with plot_output:
-                clear_output(wait=True)
-                self.plot_iteration(
-                    iteration,
-                    show_values=show_values.value,
-                    show_policy=show_policy.value,
-                    show_qvalues=show_qvalues.value
-                )
-                plt.show()
+            if algorithm_widget.value == 'Value Iteration':
+                # Use normal iteration display
+                with plot_output:
+                    clear_output(wait=True)
+                    self.plot_iteration(
+                        policy_iter,
+                        show_values=show_values.value,
+                        show_policy=show_policy.value,
+                        show_qvalues=show_qvalues.value
+                    )
+                    plt.show()
 
-            with text_output:
-                clear_output(wait=True)
-                if show_formulas.value and iteration < len(self.formula_history):
-                    self.print_formulas(iteration)
+                with text_output:
+                    clear_output(wait=True)
+                    if show_formulas.value and policy_iter < len(self.formula_history):
+                        self.print_formulas(policy_iter)
+
+            else:  # Policy Iteration
+                eval_step = eval_slider.value
+
+                with plot_output:
+                    clear_output(wait=True)
+                    self.plot_policy_iteration_step(
+                        policy_iter, eval_step,
+                        show_values=show_values.value,
+                        show_policy=show_policy.value,
+                        show_qvalues=show_qvalues.value
+                    )
+                    plt.show()
+
+                with text_output:
+                    clear_output(wait=True)
+                    if show_formulas.value and policy_iter < len(self.formula_history):
+                        self.print_policy_iteration_formulas(policy_iter, eval_step)
+
+        def on_algorithm_change(change):
+            """Handle algorithm selection change."""
+            if change['new'] == 'Value Iteration':
+                iteration_slider.description = 'Iteration:'
+                slider_container.children = [iteration_slider]
+            else:
+                iteration_slider.description = 'Policy Iter:'
+                if hasattr(self, 'policy_eval_history') and self.policy_eval_history:
+                    eval_slider.max = len(self.policy_eval_history[0]) - 1
+                    slider_container.children = [iteration_slider, eval_slider]
+                else:
+                    slider_container.children = [iteration_slider, eval_slider]
+            update_display()
+
+        def on_policy_iter_change(change):
+            """Update eval slider when policy iteration changes."""
+            if algorithm_widget.value == 'Policy Iteration' and hasattr(self, 'policy_eval_history'):
+                policy_iter = change['new']
+                if policy_iter < len(self.policy_eval_history):
+                    eval_slider.max = len(self.policy_eval_history[policy_iter]) - 1
+                    eval_slider.value = 0
 
         # Connect callbacks
         run_button.on_click(run_algorithm)
         next_step_button.on_click(next_step)
+        algorithm_widget.observe(on_algorithm_change, names='value')
         iteration_slider.observe(update_display, names='value')
+        iteration_slider.observe(on_policy_iter_change, names='value')
+        eval_slider.observe(update_display, names='value')
         show_values.observe(update_display, names='value')
         show_policy.observe(update_display, names='value')
         show_qvalues.observe(update_display, names='value')
@@ -588,8 +867,8 @@ class GridWorldMDP:
             ], layout=widgets.Layout(margin='0px 0px 0px 20px'))
         ], layout=widgets.Layout(align_items='flex-start'))
 
-        # Middle row: Iteration slider
-        middle_row = widgets.HBox([iteration_slider],
+        # Middle row: Sliders (dynamic based on algorithm)
+        middle_row = widgets.HBox([slider_container],
                                 layout=widgets.Layout(margin='10px 0px'))
 
         # Bottom row: Simple checkbox row
@@ -616,6 +895,7 @@ class GridWorldMDP:
             'run_button': run_button,
             'next_step_button': next_step_button,
             'iteration_slider': iteration_slider,
+            'eval_slider': eval_slider,
             'show_values': show_values,
             'show_policy': show_policy,
             'show_qvalues': show_qvalues,
@@ -675,8 +955,8 @@ class GridWorldMDP:
         policy = self.policy_history[iteration] if iteration < len(self.policy_history) else {}
         q_values = self.q_history[iteration] if iteration < len(self.q_history) else {}
 
-        # Increase DPI for higher resolution
-        fig, ax = plt.subplots(figsize=(max(6, self.cols * 1.5), max(4, self.rows * 1.2)), dpi=150)
+        # Increase DPI for higher resolution but reduce figure size for better fit
+        fig, ax = plt.subplots(figsize=(max(4, self.cols * 0.8), max(3, self.rows * 0.8)), dpi=150)
 
         # Calculate value range for gradient coloring (excluding terminals and obstacles)
         regular_values = []
@@ -709,7 +989,7 @@ class GridWorldMDP:
                     reward = self.terminals[state]
                     color = 'green' if reward > 0 else 'red'
                     ax.text(center_x, center_y, f'{reward:+.0f}',
-                           ha='center', va='center', fontsize=20,
+                           ha='center', va='center', fontsize=14,
                            color=color, fontweight='bold')
                     # Add background color
                     bg_color = 'lightgreen' if reward > 0 else 'lightcoral'
@@ -723,7 +1003,7 @@ class GridWorldMDP:
                                                     facecolor='gray', alpha=0.7)
                     ax.add_patch(obstacle_rect)
                     ax.text(center_x, center_y, '■', ha='center', va='center',
-                           fontsize=24, color='black')
+                           fontsize=18, color='black')
 
                 # Regular states
                 else:
@@ -734,10 +1014,10 @@ class GridWorldMDP:
                                                   facecolor=bg_color, alpha=0.4)
                         ax.add_patch(bg_rect)
 
-                    # Show values - increased font size
+                    # Show values - reduced font size and decimal places
                     if show_values:
-                        ax.text(center_x, center_y, f'{V[state]:.3f}',
-                               ha='center', va='center', fontsize=12, fontweight='bold')
+                        ax.text(center_x, center_y, f'{V[state]:.2f}',
+                               ha='center', va='center', fontsize=8, fontweight='bold')
 
                     # Show policy - handle multiple optimal actions - increased font size
                     if show_policy and state in policy:
@@ -749,7 +1029,7 @@ class GridWorldMDP:
                             # Single optimal action - show arrow at center
                             arrow = self.arrow_symbols[optimal_actions[0]]
                             ax.text(center_x, base_policy_y, arrow,
-                                   ha='center', va='center', fontsize=16, color='blue')
+                                   ha='center', va='center', fontsize=14, color='blue')
                         else:
                             # Multiple optimal actions - position based on direction
                             offset = 0.08  # Small offset amount
@@ -770,7 +1050,7 @@ class GridWorldMDP:
                                     arrow_x, arrow_y = center_x, base_policy_y
 
                                 ax.text(arrow_x, arrow_y, arrow,
-                                       ha='center', va='center', fontsize=16,
+                                       ha='center', va='center', fontsize=14,
                                        color='blue')
 
                     # Show Q-values as small triangular indicators at cell edges - increased font size
@@ -826,7 +1106,7 @@ class GridWorldMDP:
         ax.set_xticks([])
         ax.set_yticks([])
 
-        # Title with step cost info - increased font size
+        # Title with step cost info - positioned at left edge of plot
         title_parts = [f'Iteration {iteration}']
         if self.step_cost != 0:
             title_parts.append(f'(Step Cost: {self.step_cost:.2f})')
@@ -837,9 +1117,244 @@ class GridWorldMDP:
         if show_qvalues:
             title_parts.append('Q-Values')
 
-        ax.set_title(' + '.join(title_parts), fontsize=16, fontweight='bold')
+        # Position title at left edge of plot area
+        ax.text(0, self.rows + 0.15, ' + '.join(title_parts),
+                fontsize=12, fontweight='bold', ha='left', va='bottom',
+                transform=ax.transData)
+        ax.text(self.cols/2, -0.15, f'γ={self.gamma}, noise={self.noise}, step_cost={self.step_cost:.2f}',
+                ha='center', va='top', fontsize=10, transform=ax.transData)
+
+    def plot_policy_iteration_step(self, policy_iter, eval_step, show_values=True, show_policy=True, show_qvalues=False):
+        """Plot a specific policy iteration step showing intermediate policy evaluation."""
+        if not hasattr(self, 'policy_eval_history') or policy_iter >= len(self.policy_eval_history):
+            print(f"Policy iteration {policy_iter} not available")
+            return
+
+        if eval_step >= len(self.policy_eval_history[policy_iter]):
+            print(f"Evaluation step {eval_step} not available for policy iteration {policy_iter}")
+            return
+
+        # Get values from policy evaluation step
+        V = self.policy_eval_history[policy_iter][eval_step]
+
+        # Get policy for this policy iteration (fixed during evaluation)
+        policy = self.policy_history[policy_iter] if policy_iter < len(self.policy_history) else {}
+
+        # Compute Q-values for current values and policy
+        q_values = {}
+        if show_qvalues:
+            q_values, _ = self.compute_q_values_and_formulas(V)
+
+        # Increase DPI for higher resolution but reduce figure size for better fit
+        fig, ax = plt.subplots(figsize=(max(4, self.cols * 0.8), max(3, self.rows * 0.8)), dpi=150)
+
+        # Calculate value range for gradient coloring (excluding terminals and obstacles)
+        regular_values = []
+        for r in range(self.rows):
+            for c in range(self.cols):
+                state = (r, c)
+                if state not in self.terminals and state not in self.obstacles:
+                    regular_values.append(V[state])
+
+        if regular_values:
+            min_val, max_val = min(regular_values), max(regular_values)
+        else:
+            min_val, max_val = 0, 0
+
+        # Draw grid (similar to plot_iteration but with policy iteration specific styling)
+        for r in range(self.rows):
+            for c in range(self.cols):
+                y = self.rows - 1 - r
+                x = c
+
+                # Grid lines
+                rect = patches.Rectangle((x, y), 1, 1, fill=False, edgecolor='black', linewidth=1.5)
+                ax.add_patch(rect)
+
+                state = (r, c)
+                center_x, center_y = x + 0.5, y + 0.5
+
+                # Terminal states
+                if state in self.terminals:
+                    reward = self.terminals[state]
+                    color = 'green' if reward > 0 else 'red'
+                    ax.text(center_x, center_y, f'{reward:+.0f}',
+                           ha='center', va='center', fontsize=16,
+                           color=color, fontweight='bold')
+                    bg_color = 'lightgreen' if reward > 0 else 'lightcoral'
+                    bg_rect = patches.Rectangle((x, y), 1, 1, fill=True,
+                                              facecolor=bg_color, alpha=0.3)
+                    ax.add_patch(bg_rect)
+
+                # Obstacle states
+                elif state in self.obstacles:
+                    obstacle_rect = patches.Rectangle((x, y), 1, 1, fill=True,
+                                                    facecolor='gray', alpha=0.7)
+                    ax.add_patch(obstacle_rect)
+                    ax.text(center_x, center_y, '■', ha='center', va='center',
+                           fontsize=16, color='black')
+
+                # Regular states
+                else:
+                    # Add gradient background color based on value
+                    if show_values and regular_values:
+                        bg_color = self._get_value_color(V[state], min_val, max_val)
+                        bg_rect = patches.Rectangle((x, y), 1, 1, fill=True,
+                                                  facecolor=bg_color, alpha=0.4)
+                        ax.add_patch(bg_rect)
+
+                    # Show values - reduced font size and decimal places
+                    if show_values:
+                        ax.text(center_x, center_y, f'{V[state]:.2f}',
+                               ha='center', va='center', fontsize=8, fontweight='bold')
+
+                    # Show policy (fixed during policy evaluation)
+                    if show_policy and state in policy:
+                        optimal_actions = policy[state]
+                        base_policy_y = center_y - 0.2 if show_values else center_y
+
+                        if len(optimal_actions) == 1:
+                            arrow = self.arrow_symbols[optimal_actions[0]]
+                            ax.text(center_x, base_policy_y, arrow,
+                                   ha='center', va='center', fontsize=16, color='purple')  # Purple for fixed policy
+                        else:
+                            offset = 0.08
+                            for action in optimal_actions:
+                                arrow = self.arrow_symbols[action]
+                                if action == 'U':
+                                    arrow_x, arrow_y = center_x, base_policy_y + offset
+                                elif action == 'D':
+                                    arrow_x, arrow_y = center_x, base_policy_y - offset
+                                elif action == 'L':
+                                    arrow_x, arrow_y = center_x - offset, base_policy_y
+                                elif action == 'R':
+                                    arrow_x, arrow_y = center_x + offset, base_policy_y
+                                else:
+                                    arrow_x, arrow_y = center_x, base_policy_y
+
+                                ax.text(arrow_x, arrow_y, arrow,
+                                       ha='center', va='center', fontsize=16, color='purple')
+
+                    # Show Q-values (same as regular plot_iteration)
+                    if show_qvalues and state in q_values:
+                        triangle_size = 0.08
+                        triangle_positions = {
+                            'U': (center_x, y + 0.95), 'D': (center_x, y + 0.05),
+                            'L': (x + 0.05, center_y), 'R': (x + 0.95, center_y)
+                        }
+                        text_positions = {
+                            'U': (center_x, y + 0.82), 'D': (center_x, y + 0.18),
+                            'L': (x + 0.18, center_y), 'R': (x + 0.82, center_y)
+                        }
+                        triangle_orientations = {
+                            'U': [(-triangle_size, -triangle_size*0.8), (triangle_size, -triangle_size*0.8), (0, triangle_size*0.8)],
+                            'D': [(-triangle_size, triangle_size*0.8), (triangle_size, triangle_size*0.8), (0, -triangle_size*0.8)],
+                            'L': [(triangle_size*0.8, -triangle_size), (triangle_size*0.8, triangle_size), (-triangle_size*0.8, 0)],
+                            'R': [(-triangle_size*0.8, -triangle_size), (-triangle_size*0.8, triangle_size), (triangle_size*0.8, 0)]
+                        }
+
+                        for action in self.actions:
+                            if action in q_values[state]:
+                                triangle_x, triangle_y = triangle_positions[action]
+                                text_x, text_y = text_positions[action]
+                                q_val = q_values[state][action]
+
+                                triangle_points = triangle_orientations[action]
+                                triangle_coords = [(triangle_x + dx, triangle_y + dy) for dx, dy in triangle_points]
+                                triangle = patches.Polygon(triangle_coords, closed=True,
+                                                         facecolor='lightblue', edgecolor='darkblue',
+                                                         alpha=0.7, linewidth=0.5)
+                                ax.add_patch(triangle)
+
+                                ax.text(text_x, text_y, f'{q_val:.2f}',
+                                       ha='center', va='center', fontsize=6,
+                                       color='darkblue', fontweight='bold')
+
+        ax.set_xlim(0, self.cols)
+        ax.set_ylim(0, self.rows)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        # Title with policy iteration info
+        is_final_eval_step = eval_step == len(self.policy_eval_history[policy_iter]) - 1
+        eval_status = "CONVERGED" if is_final_eval_step else f"Step {eval_step}"
+
+        title_parts = [f'Policy Iter {policy_iter} | Policy Eval {eval_status}']
+        if self.step_cost != 0:
+            title_parts.append(f'(Step Cost: {self.step_cost:.2f})')
+        if show_values:
+            title_parts.append('Values')
+        if show_policy:
+            title_parts.append('Policy (Fixed)')
+        if show_qvalues:
+            title_parts.append('Q-Values')
+
+        # Position title at left edge of plot area
+        ax.text(0, self.rows + 0.15, ' + '.join(title_parts),
+                fontsize=12, fontweight='bold', ha='left', va='bottom',
+                transform=ax.transData)
         ax.text(self.cols/2, -0.15, f'γ={self.gamma}, noise={self.noise}, step_cost={self.step_cost:.2f}',
                 ha='center', va='top', fontsize=12, transform=ax.transData)
+
+    def print_policy_iteration_formulas(self, policy_iter, eval_step):
+        """Print formulas for a specific policy iteration and evaluation step."""
+        if not hasattr(self, 'policy_eval_history') or policy_iter >= len(self.policy_eval_history):
+            print(f"Policy iteration {policy_iter} not available")
+            return
+
+        if eval_step >= len(self.policy_eval_history[policy_iter]):
+            print(f"Evaluation step {eval_step} not available for policy iteration {policy_iter}")
+            return
+
+        V = self.policy_eval_history[policy_iter][eval_step]
+        policy = self.policy_history[policy_iter] if policy_iter < len(self.policy_history) else {}
+
+        # Compute formulas for current state
+        _, formulas = self.compute_q_values_and_formulas(V)
+
+        is_final_eval_step = eval_step == len(self.policy_eval_history[policy_iter]) - 1
+        eval_status = "CONVERGED" if is_final_eval_step else f"Step {eval_step}"
+
+        print(f"\n{'='*60}")
+        print(f"POLICY ITERATION FORMULAS")
+        print(f"Policy Iteration {policy_iter} | Policy Evaluation {eval_status}")
+        if self.step_cost != 0:
+            print(f"Step Cost: {self.step_cost:+.1f}")
+        print(f"{'='*60}")
+
+        print(f"\nCurrent Policy (Fixed during evaluation):")
+        for state, actions in policy.items():
+            if len(actions) == 1:
+                print(f"  π({state}) = {actions[0]}")
+            else:
+                print(f"  π({state}) = {actions} (tied optimal)")
+
+        print(f"\nQ-value Formulas:")
+        for r in range(self.rows):
+            for c in range(self.cols):
+                state = (r, c)
+                if state in formulas:
+                    print(f"\nState {state}:")
+                    for action in self.actions:
+                        if action in formulas[state]:
+                            # Highlight the action(s) chosen by current policy
+                            is_policy_action = action in policy.get(state, [])
+                            prefix = ">>> " if is_policy_action else "    "
+                            print(f"{prefix}Q({state},{action}) = {formulas[state][action]}")
+
+        # Show value function convergence info
+        if eval_step > 0:
+            prev_V = self.policy_eval_history[policy_iter][eval_step - 1]
+            max_change = 0.0
+            for r in range(self.rows):
+                for c in range(self.cols):
+                    if (r, c) not in self.terminals and (r, c) not in self.obstacles:
+                        change = abs(V[r, c] - prev_V[r, c])
+                        max_change = max(max_change, change)
+            print(f"\nMax Value Change from Previous Step: {max_change:.6f}")
+
+        if is_final_eval_step:
+            print(f"\n>>> POLICY EVALUATION CONVERGED <<<")
 
     def print_formulas(self, iteration):
         """Print Q-value formulas for a specific iteration."""
@@ -867,8 +1382,8 @@ class GridWorldMDP:
 
     def plot_environment(self):
         """Plot just the basic environment structure - terminals, obstacles, and empty states."""
-        # Increase DPI for higher resolution
-        fig, ax = plt.subplots(figsize=(max(6, self.cols * 1.5), max(4, self.rows * 1.2)), dpi=150)
+        # Increase DPI for higher resolution but reduce figure size for better fit
+        fig, ax = plt.subplots(figsize=(max(4, self.cols * 0.8), max(3, self.rows * 0.8)), dpi=150)
 
         # Draw grid
         for r in range(self.rows):
@@ -888,7 +1403,7 @@ class GridWorldMDP:
                     reward = self.terminals[state]
                     color = 'green' if reward > 0 else 'red'
                     ax.text(center_x, center_y, f'{reward:+.0f}',
-                           ha='center', va='center', fontsize=18,
+                           ha='center', va='center', fontsize=16,
                            color=color, fontweight='bold')
                     # Add background color
                     bg_color = 'lightgreen' if reward > 0 else 'lightcoral'
@@ -902,274 +1417,17 @@ class GridWorldMDP:
                                                     facecolor='gray', alpha=0.7)
                     ax.add_patch(obstacle_rect)
                     ax.text(center_x, center_y, '■', ha='center', va='center',
-                           fontsize=22, color='black')
+                           fontsize=16, color='black')
 
         ax.set_xlim(0, self.cols)
         ax.set_ylim(0, self.rows)
         ax.set_xticks([])
         ax.set_yticks([])
 
-        # Increased font sizes for title and subtitle
-        ax.set_title(f'Grid World Environment ({self.rows}x{self.cols})', fontsize=16, fontweight='bold')
+        # Position title at left edge of plot area
+        ax.text(0, self.rows + 0.15, f'Grid World Environment ({self.rows}x{self.cols})',
+                fontsize=14, fontweight='bold', ha='left', va='bottom',
+                transform=ax.transData)
         ax.text(self.cols/2, -0.15, f'γ={self.gamma}, noise={self.noise}, step_cost={self.step_cost:.2f}',
                 ha='center', va='top', fontsize=12, transform=ax.transData)
         plt.show()
-
-
-def create_classic_gridworld_env(formula_type='BERKELEY'):
-    """Create a demo environment with default settings."""
-    env = GridWorldMDP(rows=3, cols=4, gamma=0.9, noise=0.1, step_cost=0.0, formula_type=formula_type)
-
-    # Set up classic 3x4 grid world
-    env.set_terminals({(0, 3): +1, (1, 3): -1})
-    env.set_obstacles({(1, 1)})  # Classic example has one obstacle
-
-    return env
-
-
-def create_custom_environment(rows, cols, terminals, obstacles=None, gamma=0.9, noise=0.1, step_cost=0.0, formula_type='BERKELEY'):
-    """
-    Create a custom grid world environment.
-
-    Args:
-        rows (int): Number of rows
-        cols (int): Number of columns
-        terminals (dict): Dictionary of {(row, col): reward}
-        obstacles (set): Set of obstacle coordinates (row, col), or None for no obstacles
-        gamma (float): Discount factor
-        noise (float): Action noise probability
-        step_cost (float): Cost/reward for each step (negative = cost, positive = reward)
-        formula_type (str): 'AIMA' or 'BERKELEY' - determines reward calculation method
-
-    Returns:
-        GridWorldMDP: Configured environment
-    """
-    env = GridWorldMDP(rows=rows, cols=cols, gamma=gamma, noise=noise, step_cost=step_cost, formula_type=formula_type)
-    env.set_terminals(terminals)
-    env.set_obstacles(obstacles)
-    return env
-
-
-# Simple debugging helper functions
-def debug_value_iteration(formula_type='BERKELEY'):
-    """Simple function to debug value iteration step by step."""
-    env = create_classic_gridworld_env(formula_type=formula_type)
-
-    print("=== Value Iteration Debug ===")
-    print(f"Environment: {env.rows}x{env.cols}, gamma={env.gamma}")
-    print(f"Formula type: {env.formula_type}")
-
-    # Set breakpoint on next line and step into value_iteration method
-    iterations = env.value_iteration(max_iterations=5, tolerance=1e-6)
-
-    print(f"Converged in {iterations} iterations")
-    print("Final values:")
-    print(env.v_history[-1])
-
-    return env
-
-
-def debug_policy_iteration(formula_type='BERKELEY'):
-    """Simple function to debug policy iteration step by step."""
-    env = create_classic_gridworld_env(formula_type=formula_type)
-
-    print("=== Policy Iteration Debug ===")
-    print(f"Environment: {env.rows}x{env.cols}, gamma={env.gamma}")
-    print(f"Formula type: {env.formula_type}")
-
-    # Set breakpoint on next line and step into policy_iteration method
-    iterations = env.policy_iteration(max_iterations=5)
-
-    print(f"Converged in {iterations} iterations")
-    print("Final values:")
-    print(env.v_history[-1])
-
-    return env
-
-
-def show_iteration_details(env, iteration_num):
-    """Show details for a specific iteration after running an algorithm."""
-    if iteration_num >= len(env.v_history):
-        print(f"Iteration {iteration_num} not available")
-        return
-
-    print(f"\n--- Iteration {iteration_num} ({env.formula_type} formula) ---")
-    print("Values:")
-    print(env.v_history[iteration_num])
-
-    if iteration_num < len(env.policy_history):
-        print("Policy:")
-        for state, actions in env.policy_history[iteration_num].items():
-            if len(actions) == 1:
-                print(f"  {state}: {actions[0]}")
-            else:
-                print(f"  {state}: {actions} (tied optimal actions)")
-
-
-def compare_formulations():
-    """Compare AIMA and BERKELEY formulations side by side."""
-    print("=== COMPARING AIMA vs BERKELEY FORMULATIONS ===")
-
-    # AIMA formulation
-    env_aima = create_classic_gridworld_env()
-    env_aima.formula_type = 'AIMA'
-    iterations_aima = env_aima.value_iteration(max_iterations=10)
-
-    # BERKELEY formulation
-    env_berkeley = create_classic_gridworld_env()
-    env_berkeley.formula_type = 'BERKELEY'
-    iterations_berkeley = env_berkeley.value_iteration(max_iterations=10)
-
-    print(f"\nAIMA converged in {iterations_aima} iterations")
-    print(f"BERKELEY converged in {iterations_berkeley} iterations")
-
-    print(f"\nFinal values - AIMA:")
-    print(env_aima.v_history[-1])
-
-    print(f"\nFinal values - BERKELEY:")
-    print(env_berkeley.v_history[-1])
-
-    # Check if results are similar
-    values_similar = np.allclose(env_aima.v_history[-1], env_berkeley.v_history[-1], atol=1e-3)
-    policies_same = env_aima._policies_equivalent(env_aima.policy_history[-1], env_berkeley.policy_history[-1])
-
-    print(f"\nValues are similar: {values_similar}")
-    print(f"Policies are identical: {policies_same}")
-
-    return env_aima, env_berkeley
-
-
-def test_extreme_ties():
-    """Test with extreme ties - environment where all actions are equally good."""
-    print("\n=== Testing Extreme Ties (All Actions Equal) ===")
-
-    # Create a 2x2 grid with high step cost and distant terminal to make all actions equal
-    env = GridWorldMDP(rows=2, cols=2, gamma=0.5, noise=0.0, step_cost=-0.1, formula_type='BERKELEY')
-    env.set_terminals({(1, 1): +1})  # Terminal at bottom right
-    env.set_obstacles(set())  # No obstacles
-
-    # Manually set initial values to create ties
-    print("Environment setup:")
-    print(f"  Size: {env.rows}x{env.cols}")
-    print(f"  Terminals: {env.terminals}")
-    print(f"  Low gamma and step cost to create ties")
-
-    # Run just a couple iterations to see ties
-    iterations = env.value_iteration(max_iterations=3)
-    print(f"Ran {iterations} iterations")
-
-    # Show final policies
-    print("\nPolicies by iteration:")
-    for i, policy in enumerate(env.policy_history):
-        print(f"Iteration {i}:")
-        for state, actions in policy.items():
-            if len(actions) == 1:
-                print(f"  {state}: {actions[0]}")
-            else:
-                print(f"  {state}: {actions} (tied optimal actions)")
-
-    # Plot the final iteration
-    env.plot_iteration(-1, show_values=True, show_policy=True, show_qvalues=False)
-    plt.title("Extreme Ties - Multiple Overlapping Arrows")
-    plt.savefig('extreme_ties_visualization.png', dpi=150, bbox_inches='tight')
-    print(f"\nExtreme ties visualization saved to: extreme_ties_visualization.png")
-    plt.close()
-
-    return env
-
-
-def test_ties():
-    """Test function to demonstrate tie-breaking with multiple optimal actions."""
-    print("=== Testing Tie-Breaking Functionality ===")
-
-    # Create a simple 3x3 grid with terminal in the center to create more ties
-    env = GridWorldMDP(rows=3, cols=3, gamma=0.9, noise=0.0, step_cost=0.0, formula_type='BERKELEY')
-    env.set_terminals({(1, 1): +1})  # Terminal in center
-    env.set_obstacles(set())  # No obstacles
-
-    print("Environment setup:")
-    print(f"  Size: {env.rows}x{env.cols}")
-    print(f"  Terminals: {env.terminals}")
-    print(f"  No noise, no step cost")
-
-    # Run value iteration
-    iterations = env.value_iteration(max_iterations=10)
-    print(f"Converged in {iterations} iterations")
-
-    # Show final values and policies
-    print("\nFinal values:")
-    final_values = env.v_history[-1]
-    for r in range(env.rows):
-        for c in range(env.cols):
-            print(f"  ({r},{c}): {final_values[r,c]:.3f}")
-
-    print("\nFinal policy:")
-    final_policy = env.policy_history[-1]
-    for state, actions in final_policy.items():
-        if len(actions) == 1:
-            print(f"  {state}: {actions[0]}")
-        else:
-            print(f"  {state}: {actions} (tied optimal actions)")
-
-    # Plot the environment and save to file
-    env.plot_iteration(-1, show_values=True, show_policy=True, show_qvalues=False)
-    plt.title("Test Environment - Overlapping Arrows for Tied Optimal Actions")
-    plt.savefig('tie_breaking_visualization.png', dpi=150, bbox_inches='tight')
-    print("\nVisualization saved to: tie_breaking_visualization.png")
-    plt.close()  # Close the figure to free memory
-
-    return env
-
-
-# Demo usage function
-def demo(formula_type='BERKELEY'):
-    """Run a demonstration of the grid world MDP."""
-    print("Creating demo Grid World MDP...")
-    env = create_classic_gridworld_env(formula_type=formula_type)
-
-    print("Grid Configuration:")
-    print(f"  Size: {env.rows}x{env.cols}")
-    print(f"  Terminals: {env.terminals}")
-    print(f"  Obstacles: {env.obstacles}")
-    print(f"  Gamma: {env.gamma}")
-    print(f"  Noise: {env.noise}")
-    print(f"  Step Cost: {env.step_cost}")
-
-    # Create and display widgets
-    widgets = env.create_visualization_widgets()
-
-    return env, widgets
-
-
-if __name__ == "__main__":
-
-    # # Debug value iteration
-    # env = debug_value_iteration(formula_type='AIMA')
-    # # Look at specific iterations
-    # show_iteration_details(env, 0)
-    # show_iteration_details(env, 1)
-    # show_iteration_details(env, 2)
-
-    # # Debug value iteration
-    # env = debug_value_iteration(formula_type='BERKELEY')
-    # # Look at specific iterations
-    # show_iteration_details(env, 0)
-    # show_iteration_details(env, 1)
-    # show_iteration_details(env, 2)
-
-    env = debug_policy_iteration(formula_type='BERKELEY')
-    # Look at specific iterations
-    show_iteration_details(env, 0)
-    show_iteration_details(env, 1)
-    show_iteration_details(env, 2)
-
-    # Compare formulations
-    compare_formulations()
-
-    # Test tie-breaking functionality (creates PNG files)
-    print("\n" + "="*60)
-    print("TESTING TIE-BREAKING FUNCTIONALITY")
-    print("When Q-values are tied, multiple arrows will be shown overlapping")
-    print("="*60)
-    test_ties()
-    test_extreme_ties()
