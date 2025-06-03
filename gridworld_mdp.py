@@ -19,7 +19,7 @@ class GridWorldMDP:
     A configurable Grid World MDP environment with visualization capabilities.
     """
 
-    def __init__(self, rows=3, cols=4, gamma=0.9, noise=0.1, step_cost=0.0, formula_type='BERKELEY'):
+    def __init__(self, rows=3, cols=4, gamma=0.9, noise=0.2, step_cost=0.0, formula_type='BERKELEY'):
         """
         Initialize the Grid World MDP.
 
@@ -264,8 +264,9 @@ class GridWorldMDP:
             return [(1.0, state, 0)]  # Terminal states are absorbing
 
         # Calculate intended and unintended actions
-        intended_prob = 1.0 - 2 * self.noise
-        side_prob = self.noise
+        # noise represents total slip probability, split equally between left and right
+        intended_prob = 1.0 - self.noise
+        side_prob = self.noise / 2.0
 
         transitions = []
         actions_to_try = [action, self.left_of[action], self.right_of[action]]

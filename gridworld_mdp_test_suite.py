@@ -16,7 +16,7 @@ from gridworld_mdp import GridWorldMDP
 
 def create_classic_gridworld_env(formula_type='BERKELEY'):
     """Create a demo environment with default settings."""
-    env = GridWorldMDP(rows=3, cols=4, gamma=0.9, noise=0.1,
+    env = GridWorldMDP(rows=3, cols=4, gamma=0.9, noise=0.2,
                        step_cost=0.0, formula_type=formula_type)
 
     # Set up classic 3x4 grid world
@@ -51,7 +51,7 @@ def create_custom_environment(rows, cols, terminals, obstacles=None, gamma=0.9, 
 
 
 # Simple debugging helper functions
-def debug_value_iteration(formula_type='BERKELEY'):
+def debug_value_iteration(formula_type='AIMA'):
     """Simple function to debug value iteration step by step."""
     env = create_classic_gridworld_env(formula_type=formula_type)
 
@@ -69,7 +69,7 @@ def debug_value_iteration(formula_type='BERKELEY'):
     return env
 
 
-def debug_policy_iteration(formula_type='BERKELEY'):
+def debug_policy_iteration(formula_type='AIMA'):
     """Simple function to debug policy iteration step by step."""
     env = create_classic_gridworld_env(formula_type=formula_type)
 
@@ -536,32 +536,9 @@ def demo(formula_type='BERKELEY'):
 
 if __name__ == "__main__":
 
-    print("="*70)
-    print("GRIDWORLD MDP - ENHANCED WITH CUSTOM INITIAL POLICIES!")
-    print("="*70)
+    debug_value_iteration()
 
-    # Demo the new policy convergence feature
-    print("\n1. TESTING POLICY CONVERGENCE:")
-    print("   (Shows that any initial policy converges to optimal)")
-    demo_env, results = demo_policy_convergence(formula_type='BERKELEY')
-
-    # Demo custom policy creation
-    print("\n\n2. CUSTOM POLICY CREATION:")
-    demo_custom_policies()
-
-    # Test the new visualization
-    test_env = test_new_policy_iteration_visualization()
-
-    # Debug examples
-    print("\n\n3. DEBUGGING EXAMPLES:")
-    env = debug_policy_iteration(formula_type='BERKELEY')
-    # Look at specific iterations
-    show_iteration_details(env, 0)
-    show_iteration_details(env, 1)
-    show_iteration_details(env, 2)
-
-    # Compare formulations
-    compare_formulations()
+    debug_policy_iteration()
 
     # Test tie-breaking functionality (creates PNG files)
     print("\n" + "="*60)
@@ -570,19 +547,3 @@ if __name__ == "__main__":
     print("="*60)
     test_ties()
     test_extreme_ties()
-
-    print("\n\n" + "="*70)
-    print("🎓 EDUCATIONAL FEATURES SUMMARY:")
-    print("="*70)
-    print("✅ Value Iteration with step-by-step visualization")
-    print("✅ Policy Iteration with dual-slider interface")
-    print("✅ Custom initial policies (directional, random, clockwise)")
-    print("✅ Policy convergence demonstration")
-    print("✅ Formula display (AIMA vs BERKELEY)")
-    print("✅ Q-value visualization")
-    print("✅ Tie-breaking with multiple arrows")
-    print("✅ Interactive parameter adjustment")
-    print("✅ Left-aligned titles for better readability")
-    print()
-    print("Perfect for teaching MDP concepts and policy iteration!")
-    print("="*70)
