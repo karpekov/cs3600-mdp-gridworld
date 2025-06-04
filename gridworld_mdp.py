@@ -1475,7 +1475,7 @@ def create_complex_maze_environment(
     for c in range(cols):
         obstacles.add((4, c))
     obstacles.remove((4, 1))
-    obstacles.remove((4, 5))
+    obstacles.remove((4, 6))
 
     # Column #2
     for r in range(rows):
@@ -1495,7 +1495,7 @@ def create_complex_maze_environment(
     # Row #6
     obstacles.add((6, 3))
     obstacles.add((6, 4))
-    obstacles.add((6, 6))
+    obstacles.add((6, 5))
     obstacles.add((6, 7))
     obstacles.add((6, 17))
     obstacles.add((6, 18))
