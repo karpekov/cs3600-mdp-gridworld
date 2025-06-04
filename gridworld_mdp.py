@@ -1493,7 +1493,8 @@ def create_complex_maze_environment(
     obstacles.add((5, 10))
 
     # Row #6
-    obstacles.add((6, 5))
+    obstacles.add((6, 3))
+    obstacles.add((6, 4))
     obstacles.add((6, 6))
     obstacles.add((6, 7))
     obstacles.add((6, 17))
