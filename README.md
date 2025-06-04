@@ -2,6 +2,10 @@
 
 This repository provides an interactive visualization tool for exploring Markov Decision Processes (MDPs) as part of the CS3600 (Introduction to Artificial Intelligence) course at Georgia Tech. It contains implementations of value iteration and policy iteration algorithms with step-by-step visualization capabilities.
 
+Below is a demo of the step-by-step interactive visualization of the value iteration algorithm for the classic 4x3 gridworld environment:
+
+![Value Iteration Interactive Visualization](assets/mdp_viz_1080p.gif)
+
 ## Overview
 
 ### MDP Algorithms
