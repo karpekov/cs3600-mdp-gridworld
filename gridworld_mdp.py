@@ -1570,7 +1570,7 @@ def create_complex_maze_environment(
     obstacles.add((16, 11))
 
     terminals = {
-        (16, 17): +1000,
+        (15, 17): +1000,
 
         (6, 16): -5,
         (8, 21): -5,
