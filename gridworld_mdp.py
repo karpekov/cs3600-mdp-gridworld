@@ -1469,13 +1469,13 @@ def create_complex_maze_environment(
     for c in range(cols):
         obstacles.add((2, c))
     obstacles.remove((2, 1))
-    obstacles.remove((2, 21))
+    obstacles.remove((2, 16))
 
     # Row #4
     for c in range(cols):
         obstacles.add((4, c))
     obstacles.remove((4, 1))
-    obstacles.remove((4, 3))
+    obstacles.remove((4, 5))
 
     # Column #2
     for r in range(rows):
