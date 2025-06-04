@@ -1432,3 +1432,173 @@ class GridWorldMDP:
         ax.text(self.cols/2, -0.15, f'γ={self.gamma}, noise={self.noise}, step_cost={self.step_cost:.2f}',
                 ha='center', va='top', fontsize=12, transform=ax.transData)
         plt.show()
+
+
+def create_complex_maze_environment(
+    noise=0.2,
+    step_cost=1,
+    gamma=0.95
+
+):
+    """
+    Create a complex maze environment to use for testing the MDP solver.
+    """
+
+    rows = 20
+    cols = 23
+
+    obstacles = set()
+
+    # Top border walls
+    for c in range(cols):
+        obstacles.add((0, c))
+
+    # Bottom border walls
+    for c in range(cols):
+        obstacles.add((rows-1, c))
+
+    # Left border walls
+    for r in range(rows):
+        obstacles.add((r, 0))
+
+    # Right border walls
+    for r in range(rows):
+        obstacles.add((r, cols-1))
+
+    # Row #2
+    for c in range(cols):
+        obstacles.add((2, c))
+    obstacles.remove((2, 1))
+    obstacles.remove((2, 21))
+
+    # Row #4
+    for c in range(cols):
+        obstacles.add((4, c))
+    obstacles.remove((4, 1))
+    obstacles.remove((4, 3))
+
+    # Column #2
+    for r in range(rows):
+        obstacles.add((r, 2))
+    obstacles.remove((1, 2))
+    obstacles.remove((18, 2))
+
+    # Row #17
+    for c in range(cols):
+        obstacles.add((17, c))
+    obstacles.remove((17, 1))
+    obstacles.remove((17, 21))
+
+    # Row #5
+    obstacles.add((5, 10))
+
+    # Row #6
+    obstacles.add((6, 5))
+    obstacles.add((6, 6))
+    obstacles.add((6, 7))
+    obstacles.add((6, 17))
+    obstacles.add((6, 18))
+    obstacles.add((6, 19))
+
+    # Row #7
+    for c in range(10, 18):
+        obstacles.add((7, c))
+
+    # Row #8
+    obstacles.add((8, 10))
+    obstacles.add((8, 16))
+    obstacles.add((8, 17))
+
+    # Row #9
+    obstacles.add((9, 10))
+    obstacles.add((9, 16))
+    obstacles.add((9, 17))
+    obstacles.add((9, 18))
+    obstacles.add((9, 20))
+    obstacles.add((9, 21))
+
+    # Row #10
+    obstacles.add((10, 6))
+    obstacles.add((10, 7))
+    obstacles.add((10, 8))
+    obstacles.add((10, 9))
+    obstacles.add((10, 10))
+    obstacles.add((10, 16))
+
+    # Row #11
+    obstacles.add((11, 4))
+    obstacles.add((11, 12))
+    obstacles.add((11, 16))
+
+    # Row #12
+    obstacles.add((12, 4))
+    obstacles.add((12, 12))
+    obstacles.add((12, 14))
+    obstacles.add((12, 16))
+    obstacles.add((12, 17))
+    obstacles.add((12, 18))
+    obstacles.add((12, 19))
+    obstacles.add((12, 20))
+
+    # Row #13
+    obstacles.add((13, 4))
+    obstacles.add((13, 5))
+    obstacles.add((13, 7))
+    obstacles.add((13, 12))
+    obstacles.add((13, 16))
+
+    # Row #14
+    obstacles.add((14, 7))
+    obstacles.add((14, 12))
+    obstacles.add((14, 16))
+
+    # Row #15
+    obstacles.add((15, 3))
+    obstacles.add((15, 4))
+    obstacles.add((15, 5))
+    obstacles.add((15, 7))
+    obstacles.add((15, 8))
+    obstacles.add((15, 9))
+    obstacles.add((15, 10))
+    obstacles.add((15, 11))
+    obstacles.add((15, 12))
+    obstacles.add((15, 19))
+    obstacles.add((15, 20))
+    obstacles.add((15, 21))
+
+    # Row #16
+    obstacles.add((16, 11))
+
+    terminals = {
+        (16, 17): +1000,
+
+        (6, 16): -5,
+        (8, 21): -5,
+        (10, 17): -8,
+        (13, 17): -12,
+
+        (9, 6): -6,
+        (7, 8): -20,
+        (8, 8): -10,
+
+        (11, 10): -10,
+        (12, 8): -20,
+        (13, 11): -5,
+        (14, 10): -20,
+
+        (10, 12): -10,
+        (10, 13): -20,
+        (10, 14): -15,
+        (9, 14): -20,
+        (12, 15): -20,
+        (14, 13): -10,
+        (15, 15): -8
+    }
+
+    # Create the environment
+    env = GridWorldMDP(rows=rows, cols=cols, gamma=gamma,
+                       noise=noise, step_cost=step_cost)
+    env.set_terminals(terminals)
+    env.set_obstacles(obstacles)
+
+    return env
